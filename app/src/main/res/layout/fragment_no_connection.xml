@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/white">
+
+    <LinearLayout
+        android:id="@+id/content"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:gravity="center_horizontal"
+        android:orientation="vertical"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintVertical_bias="0.42">
+
+        <!-- Иконка отсутствия соединения -->
+        <ImageView
+            android:layout_width="96dp"
+            android:layout_height="96dp"
+            android:contentDescription="@string/no_connection_icon_description"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_no_connection" />
+
+        <!-- Основное сообщение (по центру экрана) -->
+        <TextView
+            android:id="@+id/title"
+            style="@style/Text.Title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="19dp"
+            android:lineHeight="54dp"
+            android:text="@string/no_connection_title"
+            android:textAlignment="center" />
+
+        <!-- Подсказка -->
+        <TextView
+            android:id="@+id/message"
+            style="@style/Text.Body"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:lineHeight="18dp"
+            android:paddingHorizontal="58dp"
+            android:text="@string/no_connection_message"
+            android:textAlignment="center" />
+    </LinearLayout>
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/retryButton"
+        style="@style/Button.Primary"
+        android:layout_width="0dp"
+        android:layout_height="48dp"
+        android:layout_marginStart="24dp"
+        android:layout_marginEnd="24dp"
+        android:layout_marginBottom="24dp"
+        android:text="@string/no_connection_retry"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent" />
+
+    <!-- Индикатор выполнения проверки (поверх кнопки) -->
+    <ProgressBar
+        android:id="@+id/progress"
+        style="?android:attr/progressBarStyleSmall"
+        android:layout_width="24dp"
+        android:layout_height="24dp"
+        android:indeterminateTint="@color/on_primary"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="@id/retryButton"
+        app:layout_constraintEnd_toEndOf="@id/retryButton"
+        app:layout_constraintStart_toStartOf="@id/retryButton"
+        app:layout_constraintTop_toTopOf="@id/retryButton" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>
