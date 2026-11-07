@@ -1,10 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="white">#FFFFFF</color>
-    <color name="primary">#271543</color>
-    <color name="on_primary">#FFFFFF</color>
-    <color name="text_primary">#191919</color>
-    <color name="text_title">#000000</color>
-    <color name="text_secondary">#4D4D4D</color>
-    <color name="indicator_inactive">#E4E7EB</color>
+    <color name="ink">#141414</color>
+    <color name="purple">#2D1148</color>
+    <color name="secondary_text">#777777</color>
+    <color name="dot_inactive">#E1E3E9</color>
+    <color name="outline">#E7E4EB</color>
+    <color name="auth_hint">#6C7890</color>
+    <color name="auth_border">#CFD5DF</color>
 </resources>

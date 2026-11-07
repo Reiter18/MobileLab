@@ -1,24 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">DriveNext</string>
-    <string name="app_slogan">Поможем найти твою следующую поездку</string>
-    <string name="splash_logo_description">Логотип DriveNext</string>
-
+    <string name="tagline">Поможем найти твою следующую поездку</string>
     <string name="no_connection_title">Нет подключения\nк интернету</string>
-    <string name="no_connection_message">Проверьте подключение и повторите попытку</string>
-    <string name="no_connection_retry">Повторить попытку</string>
-    <string name="no_connection_icon_description">Нет соединения</string>
-
-    <string name="onboarding_skip">Пропустить</string>
-    <string name="onboarding_next">Далее</string>
-    <string name="onboarding_start">Поехали</string>
+    <string name="no_connection_description">Проверьте подключение и повторите попытку</string>
+    <string name="retry">Повторить попытку</string>
+    <string name="internet_still_missing">Подключение к интернету пока отсутствует</string>
+    <string name="skip">Пропустить</string>
+    <string name="next">Далее</string>
+    <string name="lets_go">Поехали</string>
     <string name="onboarding_title_1">Аренда автомобилей</string>
-    <string name="onboarding_text_1">Открой для себя удобный и доступный способ передвижения</string>
+    <string name="onboarding_description_1">Открой для себя удобный и доступный способ передвижения</string>
     <string name="onboarding_title_2">Безопасно и удобно</string>
-    <string name="onboarding_text_2">Арендуй автомобиль и наслаждайся его удобством</string>
+    <string name="onboarding_description_2">Арендуй автомобиль и наслаждайся его удобством</string>
     <string name="onboarding_title_3">Лучшие предложения</string>
-    <string name="onboarding_text_3">Выбирай понравившееся среди сотен доступных автомобилей</string>
-
-    <string name="placeholder_login">Экран входа / регистрации</string>
-    <string name="placeholder_main">Главный экран\n(будет реализован в следующих лабораторных работах)</string>
+    <string name="onboarding_description_3">Выбирай понравившиеся среди сотен доступных автомобилей</string>
+    <string name="login">Войти</string>
+    <string name="register">Зарегистрироваться</string>
+    <string name="lab_two_title">Следующая лабораторная</string>
+    <string name="lab_two_message">Полноценный вход и регистрация будут реализованы в лабораторной работе № 2. Сейчас мы проверяем переход к этому экрану.</string>
+    <string name="understood">Понятно</string>
+    <string name="icon_no_connection">Значок отключённого соединения</string>
+    <string name="illustration_splash">Иллюстрация сервиса каршеринга</string>
 </resources>
