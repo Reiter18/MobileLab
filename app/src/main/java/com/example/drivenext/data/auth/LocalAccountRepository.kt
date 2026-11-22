@@ -9,11 +9,18 @@ class LocalAccountRepository(context: Context) {
 
     fun hasSession(): Boolean = preferences.getBoolean("session", false)
 
-    fun register(email: String, password: String) {
+    fun register(email: String, password: String, name: String, gender: String) {
         val random = ByteArray(16).also { SecureRandom().nextBytes(it) }
         val salt = random.joinToString("") { "%02x".format(it) }
         preferences.edit()
             .putString("email", email.trim())
+            .putString("name", name)
+            .putString("gender", gender)
+            .putLong("joined", System.currentTimeMillis())
+            .remove("avatar")
+            .remove("bookings")
+            .remove("last_query")
+            .remove("my_car")
             .putString("salt", salt)
             .putString("password_hash", hash(salt + password))
             .putBoolean("session", true)

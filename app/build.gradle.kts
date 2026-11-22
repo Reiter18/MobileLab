@@ -37,6 +37,7 @@ dependencies {
     implementation("androidx.fragment:fragment-ktx:1.8.8")
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.9.1")
     implementation("androidx.constraintlayout:constraintlayout:2.2.1")
+    implementation("androidx.recyclerview:recyclerview:1.3.1")
     implementation("androidx.viewpager2:viewpager2:1.1.0")
     implementation("androidx.core:core-splashscreen:1.0.1")
 }

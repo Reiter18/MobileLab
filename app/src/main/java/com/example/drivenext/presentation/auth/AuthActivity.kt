@@ -1,5 +1,6 @@
 package com.example.drivenext.presentation.auth
 
+import android.content.Intent
 import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
@@ -13,6 +14,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.FileProvider
 import com.example.drivenext.data.auth.LocalAccountRepository
 import com.example.drivenext.domain.auth.AuthFormValidator
+import com.example.drivenext.presentation.catalog.CatalogActivity
 import java.io.File
 
 class AuthActivity : AppCompatActivity() {
@@ -59,7 +61,7 @@ class AuthActivity : AppCompatActivity() {
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() { goBack() }
         })
-        render()
+        if (screen == HOME) openCatalog() else render()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -89,11 +91,7 @@ class AuthActivity : AppCompatActivity() {
             REGISTER_ONE -> RegistrationScreens(ui, values).first { advance(AuthFormValidator.firstStep(values), REGISTER_TWO) }
             REGISTER_TWO -> RegistrationScreens(ui, values).second { advance(AuthFormValidator.secondStep(values), REGISTER_THREE) }
             REGISTER_THREE -> RegistrationScreens(ui, values).third(::completeRegistration, ::choosePhoto)
-            SUCCESS -> CompletionScreens(ui).success { show(HOME) }
-            else -> CompletionScreens(ui).home {
-                account.signOut()
-                finish()
-            }
+            SUCCESS -> CompletionScreens(ui).success(::openCatalog)
         }
     }
 
@@ -103,13 +101,21 @@ class AuthActivity : AppCompatActivity() {
             message("Неверная электронная почта или пароль.")
             return
         }
-        show(HOME)
+        openCatalog()
     }
 
     private fun completeRegistration() {
         AuthFormValidator.thirdStep(values)?.let { message(it); return }
-        account.register(values["email"].orEmpty(), values["password"].orEmpty())
+        account.register(values["email"].orEmpty(), values["password"].orEmpty(),
+            listOfNotNull(values["first_name"], values["surname"]).joinToString(" "),
+            values["gender"].orEmpty())
         show(SUCCESS)
+    }
+
+    private fun openCatalog() {
+        startActivity(Intent(this, CatalogActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
+        finish()
     }
 
     private fun advance(error: String?, destination: Int) {
