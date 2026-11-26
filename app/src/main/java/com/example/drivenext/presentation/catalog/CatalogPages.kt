@@ -2,9 +2,12 @@ package com.example.drivenext.presentation.catalog
 
 import android.content.Context
 import android.content.Intent
-import android.content.SharedPreferences
+import android.graphics.Bitmap
+import android.text.InputType
+import com.example.drivenext.data.auth.Supabase
+import org.json.JSONObject
+import java.time.Instant
 import android.graphics.Color
-import android.net.Uri
 import android.view.Gravity
 import android.view.View
 import android.widget.*
@@ -62,7 +65,9 @@ internal fun Context.catalogHeading(parent: LinearLayout, title: String, back: (
 internal class CatalogPages(
     private val activity: AppCompatActivity,
     private val content: LinearLayout,
-    private val prefs: SharedPreferences,
+    private val account: Supabase,
+    private val user: JSONObject,
+    private val photo: Bitmap?,
     private val show: (String) -> Unit,
     private val pickAvatar: () -> Unit,
     private val signOut: () -> Unit
@@ -73,19 +78,22 @@ internal class CatalogPages(
         return body
     }
 
+    private val metadata = user.optJSONObject("user_metadata") ?: JSONObject()
+
     private fun avatar(fallback: Int) = activity.picture(fallback).apply {
-        val saved = prefs.getString("avatar", null)
-        if (saved != null) {
-            runCatching { setImageURI(Uri.parse(saved)) }
-            if (drawable == null) setImageResource(fallback)
+        if (photo != null) {
+            setImageBitmap(photo)
             clipToOutline = true
             background = activity.shape(Color.rgb(235, 235, 235), 100)
             scaleType = ImageView.ScaleType.CENTER_CROP
         }
     }
 
-    private fun name() = prefs.getString("name", "").orEmpty().ifBlank { "Пользователь" }
-    private fun email() = prefs.getString("email", "").orEmpty()
+    private fun name() = metadata.optString("name").ifBlank {
+        metadata.optString("full_name").ifBlank { "Пользователь" }
+    }
+
+    private fun email() = user.optString("email")
 
     fun settings() {
         activity.catalogHeading(content, "Настройки")
@@ -111,7 +119,7 @@ internal class CatalogPages(
         val photo = FrameLayout(activity).apply {
             contentDescription = "Изменить аватар"
             addView(avatar(R.drawable.avatar), FrameLayout.LayoutParams(-1, -1))
-            if (prefs.contains("avatar")) addView(activity.label("+", 16f, Color.WHITE, true).apply {
+            if (this@CatalogPages.photo != null) addView(activity.label("+", 16f, Color.WHITE, true).apply {
                 gravity = Gravity.CENTER
                 background = activity.shape(purple, 20)
             }, FrameLayout.LayoutParams(activity.dp(20), activity.dp(20), Gravity.BOTTOM or Gravity.END))
@@ -125,19 +133,23 @@ internal class CatalogPages(
             gravity = Gravity.CENTER
             setPadding(0, activity.dp(14), 0, 0)
         })
-        val joined = prefs.getLong("joined", 0L)
-        if (joined != 0L) {
+        val joined = runCatching { Instant.parse(user.getString("created_at")).toEpochMilli() }.getOrNull()
+        if (joined != null) {
             val month = SimpleDateFormat("MMMM yyyy", Locale("ru")).format(Date(joined))
             body.addView(activity.label("Дата регистрации · $month", 14f).apply { gravity = Gravity.CENTER })
         }
         body.addView(View(activity), LinearLayout.LayoutParams(1, activity.dp(18)))
         row(body, "Электронная почта", email())
         line(body)
-        row(body, "Пароль", "Поменять пароль") { info("Пароль") }
+        row(body, "Пароль", "Поменять пароль", click = ::changePassword)
         line(body)
-        row(body, "Пол", prefs.getString("gender", "").orEmpty().ifBlank { "Не указан" })
+        row(body, "Пол", metadata.optString("gender").ifBlank { "Не указан" })
         line(body)
-        row(body, "Google", "Не подключён")
+        val identities = user.optJSONArray("identities")
+        val google = (0 until (identities?.length() ?: 0)).any {
+            identities?.optJSONObject(it)?.optString("provider") == "google"
+        }
+        row(body, "Google", if (google) email() else "Не подключён")
         line(body)
         row(body, "Выйти из профиля", click = signOut)
     }
@@ -176,10 +188,7 @@ internal class CatalogPages(
         row(body, car.model, car.brand)
         row(body, "${car.price}₽ в день", "${car.transmission} · ${car.fuel}")
         if (reserve) row(body, "Подтвердить бронирование") {
-            val entries = prefs.getStringSet("bookings", emptySet()).orEmpty().toMutableSet()
-            entries.add("${car.id}| ${car.brand} ${car.model} · ${car.price}₽ в день")
-            prefs.edit().putStringSet("bookings", entries).apply()
-            show("bookings")
+            request({ account.book(car.id) }) { show("bookings") }
         }
     }
 
@@ -189,15 +198,17 @@ internal class CatalogPages(
         val car = EditText(activity).apply {
             hint = "Марка и модель"
             setSingleLine()
-            setText(prefs.getString("my_car", ""))
+            setText(metadata.optString("my_car"))
         }
         body.addView(car)
         body.addView(activity.action("Сохранить черновик", true) {
             val text = car.text.toString().trim()
             if (text.isBlank()) car.error = "Введите марку и модель"
             else {
-                prefs.edit().putString("my_car", text).apply()
-                show("settings")
+                request({ account.updateMetadata(JSONObject().put("my_car", text)) }) {
+                    metadata.put("my_car", text)
+                    show("settings")
+                }
             }
         }, LinearLayout.LayoutParams(-1, activity.dp(44)))
     }
@@ -205,9 +216,40 @@ internal class CatalogPages(
     fun bookings() {
         activity.catalogHeading(content, "Мои бронирования")
         val body = scrollBody()
-        val entries = prefs.getStringSet("bookings", emptySet()).orEmpty()
-        if (entries.isEmpty()) row(body, "Пока нет бронирований")
-        else entries.sorted().forEach { row(body, it.substringAfter("| ")) }
+        request({ account.bookings() }) { bookings ->
+            if (bookings.length() == 0) row(body, "Пока нет бронирований")
+            for (index in 0 until bookings.length()) {
+                val car = bookings.getJSONObject(index).optJSONObject("car") ?: continue
+                row(body, "${car.optString("brand")} ${car.optString("model")}",
+                    "${car.optInt("price")}₽ в день")
+            }
+        }
+    }
+
+    private fun changePassword() {
+        val input = EditText(activity).apply {
+            hint = "Минимум 6 символов"
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+        }
+        val dialog = AlertDialog.Builder(activity).setTitle("Новый пароль").setView(input)
+            .setNegativeButton("Отмена", null).setPositiveButton("Сохранить", null).show()
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+            val password = input.text.toString()
+            if (password.length < 6) { input.error = "Минимум 6 символов"; return@setOnClickListener }
+            request({ account.changePassword(password) }) { dialog.dismiss() }
+        }
+    }
+
+    private fun <T> request(work: () -> T, done: (T) -> Unit) {
+        val progress = AlertDialog.Builder(activity).setMessage("Подождите…").setCancelable(false).show()
+        account.run(work) { result ->
+            if (!activity.isFinishing && !activity.isDestroyed) {
+                progress.dismiss()
+                result.onSuccess(done).onFailure {
+                    Toast.makeText(activity, it.message ?: "Ошибка Supabase.", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
     }
 
     private fun info(title: String) {

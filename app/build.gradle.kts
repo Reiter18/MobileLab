@@ -1,7 +1,15 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
 }
+
+val local = Properties().apply {
+    val file = rootProject.file("local.properties")
+    if (file.isFile) file.inputStream().use { load(it) }
+}
+fun config(name: String) = groovy.json.JsonOutput.toJson(local.getProperty(name, ""))
 
 android {
     namespace = "com.example.drivenext"
@@ -11,6 +19,8 @@ android {
         applicationId = "com.example.drivenext"
         minSdk = 31
         targetSdk = 34
+        buildConfigField("String", "SUPABASE_URL", config("SUPABASE_URL"))
+        buildConfigField("String", "SUPABASE_KEY", config("SUPABASE_KEY"))
         versionCode = 1
         versionName = "1.0"
     }
@@ -27,7 +37,10 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
-    buildFeatures { viewBinding = true }
+    buildFeatures {
+        viewBinding = true
+        buildConfig = true
+    }
 }
 
 dependencies {

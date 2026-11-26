@@ -4,7 +4,9 @@ import android.content.Intent
 import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
+import android.text.InputType
 import android.view.View
+import android.widget.EditText
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.PickVisualMediaRequest
@@ -12,7 +14,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.FileProvider
-import com.example.drivenext.data.auth.LocalAccountRepository
+import com.example.drivenext.data.auth.Supabase
 import com.example.drivenext.domain.auth.AuthFormValidator
 import com.example.drivenext.presentation.catalog.CatalogActivity
 import java.io.File
@@ -28,7 +30,7 @@ class AuthActivity : AppCompatActivity() {
         const val HOME = 5
     }
 
-    private val account by lazy { LocalAccountRepository(applicationContext) }
+    private val account by lazy { Supabase(applicationContext) }
     private val values = mutableMapOf<String, String>()
     private var screen = LOGIN
     private var enteredFromLogin = false
@@ -61,7 +63,15 @@ class AuthActivity : AppCompatActivity() {
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() { goBack() }
         })
-        if (screen == HOME) openCatalog() else render()
+        render()
+        if (intent.data != null) {
+            val callback = intent.data
+            intent.data = null
+            handleLink(callback)
+        }
+        else if (account.needsPassword()) passwordDialog()
+        else if (screen == HOME && account.hasSession() && !account.registrationPending()) openCatalog()
+        else if (screen == HOME) show(LOGIN)
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -69,7 +79,7 @@ class AuthActivity : AppCompatActivity() {
         outState.putBoolean("entered_from_login", enteredFromLogin)
         outState.putString("photo_target", photoTarget)
         outState.putString("camera_uri", pendingCameraUri?.toString())
-        outState.putStringArrayList("entries", ArrayList(values.map { "${it.key}=${it.value}" }))
+        outState.putStringArrayList("entries", ArrayList(values.filterKeys { it !in listOf("password", "repeat", "login_password") }.map { "${it.key}=${it.value}" }))
         super.onSaveInstanceState(outState)
     }
 
@@ -87,7 +97,7 @@ class AuthActivity : AppCompatActivity() {
             LOGIN -> LoginScreen(ui).show(::signIn, {
                 enteredFromLogin = true
                 show(REGISTER_ONE)
-            }, ::message)
+            }, ::google, ::recover)
             REGISTER_ONE -> RegistrationScreens(ui, values).first { advance(AuthFormValidator.firstStep(values), REGISTER_TWO) }
             REGISTER_TWO -> RegistrationScreens(ui, values).second { advance(AuthFormValidator.secondStep(values), REGISTER_THREE) }
             REGISTER_THREE -> RegistrationScreens(ui, values).third(::completeRegistration, ::choosePhoto)
@@ -97,19 +107,89 @@ class AuthActivity : AppCompatActivity() {
 
     private fun signIn() {
         AuthFormValidator.login(values)?.let { message(it); return }
-        if (!account.signIn(values["login_email"].orEmpty(), values["login_password"].orEmpty())) {
-            message("Неверная электронная почта или пароль.")
-            return
+        val email = values.getValue("login_email").trim()
+        val password = values.getValue("login_password")
+        network({ account.signIn(email, password) }) {
+            if (account.registrationPending(email)) {
+                values["email"] = email
+                message("Заполни анкету, чтобы закончить регистрацию.")
+                show(REGISTER_ONE)
+            } else openCatalog()
         }
-        openCatalog()
     }
 
     private fun completeRegistration() {
+        if (AuthFormValidator.firstStep(values) != null) {
+            message("Проверь почту и пароль на первом шаге.")
+            show(REGISTER_ONE)
+            return
+        }
+        if (AuthFormValidator.secondStep(values) != null) {
+            message("Проверь личные данные на втором шаге.")
+            show(REGISTER_TWO)
+            return
+        }
         AuthFormValidator.thirdStep(values)?.let { message(it); return }
-        account.register(values["email"].orEmpty(), values["password"].orEmpty(),
-            listOfNotNull(values["first_name"], values["surname"]).joinToString(" "),
-            values["gender"].orEmpty())
-        show(SUCCESS)
+        val form = values.toMap()
+        network({ account.register(form) }) {
+            for (key in listOf("password", "repeat", "login_password")) values.remove(key)
+            show(SUCCESS)
+        }
+    }
+
+    private fun google() {
+        runCatching { startActivity(Intent(Intent.ACTION_VIEW, account.googleUrl())) }
+            .onFailure { message(it.message ?: "Не удалось открыть Google.") }
+    }
+
+    private fun recover() {
+        val email = values["login_email"].orEmpty().trim()
+        if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+            message("Введи почту для восстановления пароля.")
+            return
+        }
+        network({ account.recover(email) }) { message("Если аккаунт существует, на почту придёт письмо.") }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleLink(intent.data)
+    }
+
+    private fun handleLink(uri: Uri?) {
+        if (uri?.toString()?.substringBefore('?') != Supabase.REDIRECT) return
+        network({ account.exchange(requireNotNull(uri)) }) { recovery ->
+            if (recovery) passwordDialog() else openCatalog()
+        }
+    }
+
+    private fun passwordDialog() {
+        val input = EditText(this).apply {
+            hint = "Минимум 6 символов"
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+        }
+        val dialog = AlertDialog.Builder(this).setTitle("Новый пароль").setView(input)
+            .setCancelable(false)
+            .setNegativeButton("Выйти") { _, _ -> network({ runCatching { account.signOut() } }) { show(LOGIN) } }
+            .setPositiveButton("Сохранить", null).show()
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+            val password = input.text.toString()
+            if (password.length < 6) { input.error = "Минимум 6 символов"; return@setOnClickListener }
+            network({ account.changePassword(password) }) {
+                dialog.dismiss()
+                openCatalog()
+            }
+        }
+    }
+
+    private fun <T> network(work: () -> T, done: (T) -> Unit) {
+        val progress = AlertDialog.Builder(this).setMessage("Подождите…").setCancelable(false).show()
+        account.run(work) { result ->
+            if (!isFinishing && !isDestroyed) {
+                progress.dismiss()
+                result.onSuccess(done).onFailure { message(it.message ?: "Не удалось подключиться.") }
+            }
+        }
     }
 
     private fun openCatalog() {

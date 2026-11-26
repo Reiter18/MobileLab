@@ -11,7 +11,7 @@ import com.example.drivenext.databinding.ActivityStartupBinding
 import com.example.drivenext.presentation.common.DriveNextViewModelFactory
 import com.example.drivenext.presentation.common.Navigation
 import com.example.drivenext.presentation.auth.AuthActivity
-import com.example.drivenext.data.auth.LocalAccountRepository
+import com.example.drivenext.data.auth.Supabase
 
 class StartupActivity : AppCompatActivity() {
     private val viewModel: StartupViewModel by viewModels {
@@ -29,7 +29,7 @@ class StartupActivity : AppCompatActivity() {
     }
 
     private fun chooseNextScreen() {
-        if (LocalAccountRepository(applicationContext).hasSession()) {
+        if (Supabase(applicationContext).hasSession()) {
             startActivity(Intent(this, AuthActivity::class.java).putExtra(AuthActivity.EXTRA_SCREEN, AuthActivity.HOME))
             finish()
             return

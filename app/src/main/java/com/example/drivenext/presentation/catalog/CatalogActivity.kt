@@ -14,13 +14,19 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import com.example.drivenext.data.auth.LocalAccountRepository
+import com.example.drivenext.data.auth.Supabase
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import org.json.JSONObject
 import com.example.drivenext.presentation.auth.AuthActivity
 
 class CatalogActivity : AppCompatActivity() {
-    private val api = CatalogApi()
+    private val account by lazy { Supabase(this) }
+    private val api by lazy { CatalogApi(account) }
+    private var user = JSONObject()
+    private var avatar: Bitmap? = null
     private val handler = Handler(Looper.getMainLooper())
-    private val prefs by lazy { getSharedPreferences("local_account", MODE_PRIVATE) }
+    private val prefs by lazy { getSharedPreferences("catalog_ui", MODE_PRIVATE) }
     private var query = ""
     private var page = "home"
     private var selectedCar: Car? = null
@@ -34,19 +40,39 @@ class CatalogActivity : AppCompatActivity() {
     }
 
     private val avatarPicker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) {
-            try {
-                contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                prefs.edit().putString("avatar", uri.toString()).apply()
-                show("profile")
-            } catch (_: SecurityException) {
-                toast("Не удалось сохранить фото.")
-            }
+        if (uri != null) account.run({
+            account.saveAvatar(uri)
+            val bytes = account.avatar()
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+        }) { result ->
+            if (!isFinishing && !isDestroyed) result.onSuccess {
+                avatar = it
+                if (page == "profile" || page == "settings") show(page)
+            }.onFailure { toast(it.message ?: "Не удалось сохранить фото.") }
         }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (!account.hasSession() || account.needsPassword()) {
+            openLogin()
+            return
+        }
+        account.run({
+            val profile = account.user()
+            val data = profile.optJSONObject("user_metadata")
+            val picture = if (data?.optBoolean("has_avatar") == true) runCatching {
+                val bytes = account.avatar()
+                BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+            }.getOrNull() else null
+            profile to picture
+        }) { result ->
+            if (!isFinishing && !isDestroyed) result.onSuccess { (profile, picture) ->
+                user = profile
+                avatar = picture
+                if (page == "settings" || page == "profile" || page == "add") show(page)
+            }.onFailure { if (!account.hasSession()) openLogin() }
+        }
         query = prefs.getString("last_query", "").orEmpty()
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
@@ -86,7 +112,7 @@ class CatalogActivity : AppCompatActivity() {
         window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR or
             View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
 
-        val pages = CatalogPages(this, content, prefs, ::show,
+        val pages = CatalogPages(this, content, account, user, avatar, ::show,
             { avatarPicker.launch(arrayOf("image/*")) }, ::signOut)
         when (page) {
             "home", "results" -> catalog()
@@ -176,6 +202,7 @@ class CatalogActivity : AppCompatActivity() {
                     if (cars.isEmpty()) status.addView(label("Автомобили не найдены", 15f))
                 },
                 onFailure = {
+                    if (!account.hasSession()) { openLogin(); return@fold }
                     val error = if (term.isBlank()) "Не удалось загрузить данные. Попробуйте снова."
                     else "Не удалось выполнить поиск. Попробуйте снова."
                     status.addView(label(error, 14f).apply {
@@ -196,7 +223,12 @@ class CatalogActivity : AppCompatActivity() {
     }
 
     private fun signOut() {
-        LocalAccountRepository(applicationContext).signOut()
+        account.run({ runCatching { account.signOut() } }) {
+            if (!isFinishing && !isDestroyed) openLogin()
+        }
+    }
+
+    private fun openLogin() {
         startActivity(Intent(this, AuthActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
         finish()
@@ -206,7 +238,7 @@ class CatalogActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         handler.removeCallbacks(delayedSearch)
-        api.close()
+        api.cancel()
         super.onDestroy()
     }
 }

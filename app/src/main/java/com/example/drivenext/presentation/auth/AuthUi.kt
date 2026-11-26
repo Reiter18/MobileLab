@@ -78,6 +78,18 @@ class AuthUi(
             body.addView(this, LinearLayout.LayoutParams(-1, -2))
         }
 
+    private var updateButton: () -> Unit = {}
+
+    fun enableWhen(view: View, ready: () -> Boolean) {
+        updateButton = {
+            view.isEnabled = ready()
+            view.alpha = if (view.isEnabled) 1f else 0.55f
+        }
+        updateButton()
+    }
+
+    fun formChanged() = updateButton()
+
     fun field(
         label: String,
         placeholder: String,
@@ -102,6 +114,7 @@ class AuthUi(
                 override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
                 override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                     values[key] = s.toString()
+                    formChanged()
                 }
                 override fun afterTextChanged(s: Editable?) {}
             })
@@ -132,9 +145,10 @@ class AuthUi(
     fun dateField(label: String, key: String) {
         text(label)
         val date = TextView(activity).apply {
-            text = "▦  " + (values[key] ?: "DD/MM/YYYY")
+            text = "  " + (values[key] ?: "DD/MM/YYYY")
             textSize = 14f
             setTextColor(hintColor)
+            setCompoundDrawablesRelativeWithIntrinsicBounds(R.drawable.lab_calendar, 0, 0, 0)
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(14), 0, dp(14), 0)
             background = outline()
@@ -142,7 +156,8 @@ class AuthUi(
                 val today = Calendar.getInstance()
                 DatePickerDialog(activity, { _, year, month, day ->
                     values[key] = "%02d/%02d/%04d".format(Locale.US, day, month + 1, year)
-                    text = "▦  ${values[key]}"
+                    text = "  ${values[key]}"
+                    formChanged()
                 }, today.get(Calendar.YEAR), today.get(Calendar.MONTH), today.get(Calendar.DAY_OF_MONTH)).show()
             }
         }
@@ -150,7 +165,7 @@ class AuthUi(
         spacer(17)
     }
 
-    fun bottomButton(label: String, action: () -> Unit) {
+    fun bottomButton(label: String, action: () -> Unit, ready: () -> Boolean = { true }) {
         val view = TextView(activity).apply {
             text = label
             textSize = 14f
@@ -161,6 +176,7 @@ class AuthUi(
             isFocusable = true
             setOnClickListener { action() }
         }
+        enableWhen(view, ready)
         bottom.addView(view, LinearLayout.LayoutParams(-1, dp(50)))
     }
 
@@ -174,8 +190,7 @@ class AuthUi(
         val icon = ImageView(activity).apply {
             if (values.containsKey(key)) setImageURI(Uri.parse(values[key]))
             else {
-                setImageResource(android.R.drawable.ic_menu_upload)
-                imageTintList = ColorStateList.valueOf(hintColor)
+                setImageResource(R.drawable.lab_upload)
             }
             scaleType = ImageView.ScaleType.CENTER_INSIDE
             background = outline()

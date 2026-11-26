@@ -10,6 +10,8 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.RadioButton
 import android.widget.RadioGroup
+import android.view.View
+import com.example.drivenext.R
 
 class RegistrationScreens(private val ui: AuthUi, private val values: MutableMap<String, String>) {
     fun first(onNext: () -> Unit) = with(ui) {
@@ -46,12 +48,15 @@ class RegistrationScreens(private val ui: AuthUi, private val values: MutableMap
                 textSize = 14f
                 setTextColor(hintColor)
                 buttonTintList = ColorStateList.valueOf(purple)
-                isChecked = values["gender"] == gender
-                setOnClickListener { values["gender"] = gender }
+                id = View.generateViewId()
+                setOnClickListener { values["gender"] = gender; formChanged() }
             })
+            if (values["gender"] == gender) group.check(group.getChildAt(group.childCount - 1).id)
         }
         body.addView(group)
-        bottomButton("Далее", onNext)
+        bottomButton("Далее", onNext) {
+            listOf("surname", "first_name", "birth", "gender").all { !values[it].isNullOrBlank() }
+        }
     }
 
     fun third(onNext: () -> Unit, onPhoto: (String) -> Unit) = with(ui) {
@@ -59,8 +64,7 @@ class RegistrationScreens(private val ui: AuthUi, private val values: MutableMap
         val avatar = ImageView(activity).apply {
             if (values.containsKey("avatar")) setImageURI(Uri.parse(values["avatar"]))
             else {
-                setImageResource(android.R.drawable.ic_menu_myplaces)
-                imageTintList = avatarTint()
+                setImageResource(R.drawable.lab_signup_avatar)
             }
             scaleType = ImageView.ScaleType.CENTER_INSIDE
             setPadding(dp(32), dp(15), dp(32), dp(15))
@@ -74,6 +78,8 @@ class RegistrationScreens(private val ui: AuthUi, private val values: MutableMap
         dateField("Дата выдачи", "issued")
         upload("Загрузите фото водительского удостоверения", "licence_photo")
         upload("Загрузите фото паспорта", "passport_photo")
-        bottomButton("Далее", onNext)
+        bottomButton("Далее", onNext) {
+            listOf("licence", "issued", "licence_photo", "passport_photo").all { !values[it].isNullOrBlank() }
+        }
     }
 }

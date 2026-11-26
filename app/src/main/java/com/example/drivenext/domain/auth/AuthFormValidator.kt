@@ -1,6 +1,5 @@
 package com.example.drivenext.domain.auth
 
-import android.util.Patterns
 import java.text.SimpleDateFormat
 import java.util.Locale
 
@@ -13,7 +12,7 @@ object AuthFormValidator {
     fun login(values: Map<String, String>): String? {
         val email = values["login_email"].orEmpty().trim()
         val password = values["login_password"].orEmpty()
-        return if (!Patterns.EMAIL_ADDRESS.matcher(email).matches() || password.isBlank())
+        return if (!registrationEmail.matches(email) || password.isBlank())
             "Введите корректную электронную почту и пароль." else null
     }
 
