@@ -132,11 +132,33 @@ internal class Supabase(context: Context) {
 
     fun cars(query: String) = array(db + "rpc/search_cars", obj("term" to query))
 
-    fun bookings() = array(db + "bookings?select=car:cars(model,brand,price)&order=created_at.desc")
+    fun ownerKey() = "$host/${prefs.getString("user_id", "")}"
 
-    fun book(id: String) {
-        json(db + "bookings", obj("car_id" to id.toLong()), token = access(),
-            prefer = "resolution=ignore-duplicates")
+    fun car(id: Long) = array(db + "cars?select=*&id=eq.$id").optJSONObject(0)
+        ?: error("Автомобиль не найден.")
+
+    fun favoriteCars(ids: List<Long>): JSONArray {
+        if (ids.isEmpty()) return JSONArray()
+        return array(db + "cars?select=*&id=in.(${ids.joinToString(",")})&order=id")
+    }
+
+    fun bookings() = array(db + "bookings?select=*,car:cars(*)&order=starts_at.desc")
+
+    fun booking(id: Long) = array(db + "bookings?select=*,car:cars(*)&id=eq.$id").optJSONObject(0)
+        ?: error("Бронирование не найдено.")
+
+    fun driver() = array(db + "registration_profiles?select=first_name,surname,patronymic,licence&limit=1")
+        .optJSONObject(0)
+
+    fun book(id: Long, start: String, end: String, requestId: String) {
+        rpc("lab4_book", obj("car" to id, "rental_start" to start,
+            "rental_end" to end, "request_key" to requestId))
+    }
+
+    fun cancelBooking(id: Long) { rpc("lab4_cancel", obj("booking" to id)) }
+
+    private fun rpc(name: String, body: JSONObject) {
+        request(db + "rpc/" + name, "POST", access(), body.toString().toByteArray())
     }
 
     fun saveAvatar(uri: Uri) {

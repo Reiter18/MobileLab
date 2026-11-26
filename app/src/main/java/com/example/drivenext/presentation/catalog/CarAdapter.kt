@@ -73,6 +73,7 @@ internal class CarAdapter(
         private val price = context.label("", 14f, Color.BLACK, true)
         private val transmission = context.label("", 12f, muted)
         private val fuel = context.label("", 12f, muted)
+        private val carImage = context.picture(R.drawable.car)
         private var car: Car? = null
 
         init {
@@ -87,7 +88,7 @@ internal class CarAdapter(
                 info.addView(title)
                 info.addView(brand)
                 info.addView(price, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(7) })
-                area.addView(picture(R.drawable.car), FrameLayout.LayoutParams(dp(151), dp(70),
+                area.addView(carImage, FrameLayout.LayoutParams(dp(151), dp(70),
                     Gravity.END or Gravity.CENTER_VERTICAL))
                 area.addView(info)
                 card.addView(area, LinearLayout.LayoutParams(-1, dp(105)))
@@ -113,6 +114,7 @@ internal class CarAdapter(
 
         fun bind(item: Car) {
             car = item
+            carImage.setImageResource(if (item.brand == "Tesla") R.drawable.lab4_tesla else R.drawable.car)
             title.text = item.model
             brand.text = item.brand
             price.text = "${item.price}₽ в день"

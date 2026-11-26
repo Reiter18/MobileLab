@@ -29,7 +29,11 @@ class CatalogActivity : AppCompatActivity() {
     private val prefs by lazy { getSharedPreferences("catalog_ui", MODE_PRIVATE) }
     private var query = ""
     private var page = "home"
-    private var selectedCar: Car? = null
+    private var carId = 0L
+    private var bookingId = 0L
+    private var period = RentalPeriod()
+    private var rentalBack = "home"
+    private var bookingsBack = "settings"
     private var carBack = "home"
     private lateinit var content: LinearLayout
     private lateinit var status: LinearLayout
@@ -73,19 +77,40 @@ class CatalogActivity : AppCompatActivity() {
                 if (page == "settings" || page == "profile" || page == "add") show(page)
             }.onFailure { if (!account.hasSession()) openLogin() }
         }
-        query = prefs.getString("last_query", "").orEmpty()
+        query = savedInstanceState?.getString("query") ?: prefs.getString("last_query", "").orEmpty()
+        period = RentalPeriod(savedInstanceState)
+        carId = savedInstanceState?.getLong("car_id") ?: 0L
+        bookingId = savedInstanceState?.getLong("booking_id") ?: 0L
+        carBack = savedInstanceState?.getString("car_back") ?: "home"
+        rentalBack = savedInstanceState?.getString("rental_back") ?: "home"
+        bookingsBack = savedInstanceState?.getString("bookings_back") ?: "settings"
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 when (page) {
                     "home" -> finish()
                     "results" -> show("home")
-                    "profile", "bookings", "add" -> show("settings")
-                    "details", "reserve" -> show(carBack)
+                    "profile", "add" -> show("settings")
+                    "bookings" -> show(bookingsBack)
+                    "booking" -> show("bookings")
+                    "details" -> show(carBack)
+                    "reserve" -> show(rentalBack)
                     else -> openHome()
                 }
             }
         })
-        show(if (query.isBlank()) "home" else "results")
+        show(savedInstanceState?.getString("catalog_page") ?: if (query.isBlank()) "home" else "results")
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putString("catalog_page", page)
+        outState.putString("query", query)
+        outState.putLong("car_id", carId)
+        outState.putLong("booking_id", bookingId)
+        outState.putString("car_back", carBack)
+        outState.putString("rental_back", rentalBack)
+        outState.putString("bookings_back", bookingsBack)
+        period.save(outState)
     }
 
     private fun openHome() {
@@ -102,26 +127,48 @@ class CatalogActivity : AppCompatActivity() {
         val root = column().apply { setBackgroundColor(Color.WHITE) }
         content = column()
         root.addView(content, LinearLayout.LayoutParams(-1, 0, 1f))
-        val nav = catalogNavigation(page) { destination ->
-            if (destination == "home") openHome() else show(destination)
+        if (page in listOf("home", "results", "details", "favorites", "settings", "profile", "add")) {
+            val activeTab = if (page == "details") carBack else page
+            val nav = catalogNavigation(activeTab) { target ->
+                if (target == "home") openHome() else show(target)
+            }
+            root.addView(nav, LinearLayout.LayoutParams(-1, dp(56)))
         }
-        root.addView(nav, LinearLayout.LayoutParams(-1, dp(56)))
         setContentView(root)
         window.statusBarColor = if (page == "home") Color.rgb(246, 242, 252) else Color.WHITE
         window.navigationBarColor = Color.WHITE
         window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR or
             View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
 
-        val pages = CatalogPages(this, content, account, user, avatar, ::show,
-            { avatarPicker.launch(arrayOf("image/*")) }, ::signOut)
+        val rental = RentalPages(this, content, account)
         when (page) {
-            "home", "results" -> catalog()
-            "settings" -> pages.settings()
-            "profile" -> pages.profile()
-            "details" -> selectedCar?.let { pages.carPage(it, false, carBack) }
-            "reserve" -> selectedCar?.let { pages.carPage(it, true, carBack) }
-            "bookings" -> pages.bookings()
-            "add" -> pages.addCar()
+            "home", "results", "favorites" -> catalog()
+            "details" -> rental.details(carId, { show(carBack) }, ::startRental)
+            "reserve" -> rental.checkout(carId, period, { show(rentalBack) }) {
+                carId = 0
+                show("trip")
+            }
+            "trip" -> rental.success({
+                bookingsBack = "home"
+                show("bookings")
+            }, ::openHome)
+            "bookings" -> rental.bookings({ show(bookingsBack) }) {
+                bookingId = it
+                show("booking")
+            }
+            "booking" -> rental.booking(bookingId, user.optJSONObject("user_metadata")
+                ?.optString("full_name").orEmpty()) { show("bookings") }
+            else -> {
+                val pages = CatalogPages(this, content, account, user, avatar, { target ->
+                    if (target == "bookings") bookingsBack = "settings"
+                    show(target)
+                }, { avatarPicker.launch(arrayOf("image/*")) }, ::signOut)
+                when (page) {
+                    "settings" -> pages.settings()
+                    "profile" -> pages.profile()
+                    "add" -> pages.addCar()
+                }
+            }
         }
     }
 
@@ -163,6 +210,8 @@ class CatalogActivity : AppCompatActivity() {
                     return true
                 }
             })
+        } else if (page == "favorites") {
+            catalogHeading(content, "Избранное")
         } else {
             catalogHeading(content, "Результаты поиска") { show("home") }
         }
@@ -190,16 +239,22 @@ class CatalogActivity : AppCompatActivity() {
     private fun saveQuery() { prefs.edit().putString("last_query", query).apply() }
 
     private fun loadCars() {
-        val term = query.trim()
+        val favorites = page == "favorites"
+        val term = if (favorites) "" else query.trim()
+        val ids: (() -> List<Long>)? = if (favorites) {
+            { FavoritesDb.get(this).favorites().ids(account.ownerKey()) }
+        } else null
         status.removeAllViews()
         status.addView(ProgressBar(this), LinearLayout.LayoutParams(dp(40), dp(48)))
         adapter.show(emptyList())
-        api.load(term) { result ->
+        api.load(term, ids) { result ->
             status.removeAllViews()
             result.fold(
                 onSuccess = { cars ->
                     adapter.show(cars)
-                    if (cars.isEmpty()) status.addView(label("Автомобили не найдены", 15f))
+                    if (cars.isEmpty()) status.addView(
+                        label(if (favorites) "В избранном пока пусто" else "Автомобили не найдены", 15f)
+                    )
                 },
                 onFailure = {
                     if (!account.hasSession()) { openLogin(); return@fold }
@@ -217,9 +272,15 @@ class CatalogActivity : AppCompatActivity() {
     }
 
     private fun openCar(car: Car, destination: String) {
-        selectedCar = car
+        carId = car.id.toLong()
         carBack = page
-        show(destination)
+        if (destination == "reserve") startRental() else show(destination)
+    }
+
+    private fun startRental() {
+        period = RentalPeriod()
+        rentalBack = page
+        show("reserve")
     }
 
     private fun signOut() {

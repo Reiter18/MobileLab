@@ -23,10 +23,11 @@ internal fun Context.catalogNavigation(page: String, navigate: (String) -> Unit)
     elevation = dp(3).toFloat()
     setBackgroundColor(Color.WHITE)
     val settingsSelected = page in listOf("settings", "profile", "add")
-    val homeSelected = !settingsSelected && page != "bookings"
+    val favoriteSelected = page == "favorites"
+    val homeSelected = !settingsSelected && !favoriteSelected
     val icons = listOf(
         Triple(if (homeSelected) R.drawable.home_on else R.drawable.home_off, "Главная", "home"),
-        Triple(R.drawable.saved, "Мои бронирования", "bookings"),
+        Triple(if (favoriteSelected) R.drawable.lab4_saved_on else R.drawable.saved, "Избранное", "favorites"),
         Triple(if (settingsSelected) R.drawable.gear_on else R.drawable.gear_off, "Настройки", "settings")
     )
     for ((icon, name, destination) in icons) {
@@ -35,14 +36,12 @@ internal fun Context.catalogNavigation(page: String, navigate: (String) -> Unit)
             isSelected = when (destination) {
                 "home" -> homeSelected
                 "settings" -> settingsSelected
-                else -> page == "bookings"
+                else -> favoriteSelected
             }
             setOnClickListener {
                 navigate(destination)
             }
-            addView(picture(icon).apply {
-                if (destination == "bookings" && page == "bookings") setColorFilter(purple)
-            }, FrameLayout.LayoutParams(dp(23), dp(23), Gravity.CENTER))
+            addView(picture(icon), FrameLayout.LayoutParams(dp(23), dp(23), Gravity.CENTER))
         }
         addView(item, LinearLayout.LayoutParams(0, -1, 1f))
     }
@@ -181,17 +180,6 @@ internal class CatalogPages(
             LinearLayout.LayoutParams(-1, activity.dp(1)))
     }
 
-    fun carPage(car: Car, reserve: Boolean, back: String) {
-        activity.catalogHeading(content, if (reserve) "Оформление аренды" else "Детали") { show(back) }
-        val body = scrollBody()
-        body.addView(activity.picture(R.drawable.car), LinearLayout.LayoutParams(-1, activity.dp(160)))
-        row(body, car.model, car.brand)
-        row(body, "${car.price}₽ в день", "${car.transmission} · ${car.fuel}")
-        if (reserve) row(body, "Подтвердить бронирование") {
-            request({ account.book(car.id) }) { show("bookings") }
-        }
-    }
-
     fun addCar() {
         activity.catalogHeading(content, "Подключить свой автомобиль") { show("settings") }
         val body = scrollBody().apply { setPadding(activity.dp(18), activity.dp(12), activity.dp(18), 0) }
@@ -211,19 +199,6 @@ internal class CatalogPages(
                 }
             }
         }, LinearLayout.LayoutParams(-1, activity.dp(44)))
-    }
-
-    fun bookings() {
-        activity.catalogHeading(content, "Мои бронирования")
-        val body = scrollBody()
-        request({ account.bookings() }) { bookings ->
-            if (bookings.length() == 0) row(body, "Пока нет бронирований")
-            for (index in 0 until bookings.length()) {
-                val car = bookings.getJSONObject(index).optJSONObject("car") ?: continue
-                row(body, "${car.optString("brand")} ${car.optString("model")}",
-                    "${car.optInt("price")}₽ в день")
-            }
-        }
     }
 
     private fun changePassword() {
